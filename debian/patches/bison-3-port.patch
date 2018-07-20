@@ -1,0 +1,11 @@
+--- ike.orig/source/iked/conf.parse.yy
++++ ike/source/iked/conf.parse.yy
+@@ -41,7 +41,7 @@
+ 
+ %skeleton "lalr1.cc"
+ %defines
+-%define "parser_class_name" "conf_parser"
++%define "parser_class_name" {conf_parser}
+ 
+ %{
+ 
