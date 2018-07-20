@@ -1,1 +1,2 @@
 cmake-3-port.patch
+flex-fix-missing-file.patch
