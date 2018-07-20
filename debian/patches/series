@@ -2,3 +2,4 @@ cmake-3-port.patch
 flex-fix-missing-file.patch
 bison-3-port.patch
 openssl-1.1-port.patch
+fix-readdir.patch
