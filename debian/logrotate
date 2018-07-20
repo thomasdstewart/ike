@@ -1,0 +1,8 @@
+/var/log/iked.log {
+  compress
+  copytruncate
+  rotate 4
+  missingok
+  notifempty
+  weekly
+}
