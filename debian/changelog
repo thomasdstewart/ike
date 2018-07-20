@@ -1,0 +1,10 @@
+ike (2.2.1+dfsg-1) UNRELEASED; urgency=medium
+
+  * Package adoption.
+  * GUI packages dropped (QT4 is deprecated).
+  * Update to debhelper 11.
+  * New Git history as I can't find the old one online.
+  * Update Standards-Version to 4.1.5.
+  * FIXME sysvinit script dropped.
+
+ -- Sam Morris <sam@robots.org.uk>  Thu, 19 Jul 2018 10:08:38 +0100

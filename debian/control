@@ -1,0 +1,21 @@
+Source: ike
+Maintainer: Sam Morris <sam@robots.org.uk>
+Section: net
+Priority: optional
+Build-Depends:
+ bison,
+ cmake,
+ debhelper (>= 11~),
+ flex,
+ libedit-dev,
+ libssl-dev,
+Standards-Version: 4.1.5
+Homepage: https://www.shrew.net/download/ike
+Rules-Requires-Root: no
+
+Package: ike
+Architecture: any
+Depends:
+ ${shlibs:Depends}
+ ${misc:Depends}
+Description: Shrew Soft Inc VPN Client

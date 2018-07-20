@@ -1,0 +1,9 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DMANDIR=/usr/share/man -DNATT=YES
+
+# vim: ts=8 sts=4 sw=4 noet
