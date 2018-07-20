@@ -1,20 +1,20 @@
 From: Sam Morris <sam@robots.org.uk>
-Date: Fri, 20 Jul 2018 14:20:24 +0100
+Date: Fri, 20 Jul 2018 12:04:16 +0100
 Subject: openssl-1.1-port
 
 ---
- source/iked/crypto.cpp          |  87 +++++++++---------
- source/iked/ike.cpp             |  26 +++---
- source/iked/ike.exch.config.cpp |  26 +++---
- source/iked/ike.exch.inform.cpp |  26 +++---
- source/iked/ike.exch.phase1.cpp | 196 ++++++++++++++++++++--------------------
- source/iked/ike.exch.phase2.cpp |  80 ++++++++--------
- source/iked/ike.idb.exch.cpp    |  12 +--
+ source/iked/crypto.cpp          |  87 ++++++++--------
+ source/iked/ike.cpp             |  30 +++---
+ source/iked/ike.exch.config.cpp |  32 +++---
+ source/iked/ike.exch.inform.cpp |  31 +++---
+ source/iked/ike.exch.phase1.cpp | 214 ++++++++++++++++++++--------------------
+ source/iked/ike.exch.phase2.cpp |  90 ++++++++---------
+ source/iked/ike.idb.exch.cpp    |  16 +--
  source/iked/ike.idb.phase1.cpp  |   4 +-
  source/iked/ike.idb.phase2.cpp  |   4 +-
- source/iked/ike.keyfile.cpp     |  32 ++++---
- source/libike/manager.file.cpp  |  10 +-
- 11 files changed, 251 insertions(+), 252 deletions(-)
+ source/iked/ike.keyfile.cpp     |  32 +++---
+ source/libike/manager.file.cpp  |  12 ++-
+ 11 files changed, 286 insertions(+), 266 deletions(-)
 
 diff --git a/source/iked/crypto.cpp b/source/iked/crypto.cpp
 index 421e34f..9bac314 100644
@@ -168,16 +168,18 @@ index 421e34f..9bac314 100644
 -	return false;
  }
 diff --git a/source/iked/ike.cpp b/source/iked/ike.cpp
-index 1ad6a44..ee41e65 100644
+index 1ad6a44..ca3acc4 100644
 --- a/source/iked/ike.cpp
 +++ b/source/iked/ike.cpp
-@@ -391,11 +391,10 @@ long _IKED::packet_ike_decrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
+@@ -391,11 +391,12 @@ long _IKED::packet_ike_decrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
  	// init cipher key and iv
  	//
  
 -	EVP_CIPHER_CTX ctx_cipher;
 -	EVP_CIPHER_CTX_init( &ctx_cipher );
 +	EVP_CIPHER_CTX * ctx_cipher = EVP_CIPHER_CTX_new();
++	if (!ctx_cipher)
++		return LIBIKE_MEMORY;
  
  	EVP_CipherInit_ex(
 -		&ctx_cipher,
@@ -185,7 +187,7 @@ index 1ad6a44..ee41e65 100644
  		sa->evp_cipher,
  		NULL,
  		NULL,
-@@ -403,11 +402,11 @@ long _IKED::packet_ike_decrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
+@@ -403,11 +404,11 @@ long _IKED::packet_ike_decrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
  		0 );
  
  	EVP_CIPHER_CTX_set_key_length(
@@ -199,7 +201,7 @@ index 1ad6a44..ee41e65 100644
  		NULL,
  		NULL,
  		sa->key.buff(),
-@@ -419,12 +418,12 @@ long _IKED::packet_ike_decrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
+@@ -419,12 +420,12 @@ long _IKED::packet_ike_decrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
  	//
  
  	EVP_Cipher(
@@ -214,13 +216,15 @@ index 1ad6a44..ee41e65 100644
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -595,11 +594,10 @@ long _IKED::packet_ike_encrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
+@@ -595,11 +596,12 @@ long _IKED::packet_ike_encrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
  	// encrypt all but header
  	//
  
 -	EVP_CIPHER_CTX ctx_cipher;
 -	EVP_CIPHER_CTX_init( &ctx_cipher );
 +	EVP_CIPHER_CTX * ctx_cipher = EVP_CIPHER_CTX_new();
++	if (!ctx_cipher)
++		return LIBIKE_MEMORY;
  
  	EVP_CipherInit_ex(
 -		&ctx_cipher,
@@ -228,7 +232,7 @@ index 1ad6a44..ee41e65 100644
  		sa->evp_cipher,
  		NULL,
  		NULL,
-@@ -607,11 +605,11 @@ long _IKED::packet_ike_encrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
+@@ -607,11 +609,11 @@ long _IKED::packet_ike_encrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
  		1 );
  
  	EVP_CIPHER_CTX_set_key_length(
@@ -242,7 +246,7 @@ index 1ad6a44..ee41e65 100644
  		NULL,
  		NULL,
  		sa->key.buff(),
-@@ -619,12 +617,12 @@ long _IKED::packet_ike_encrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
+@@ -619,13 +621,11 @@ long _IKED::packet_ike_encrypt( IDB_PH1 * sa, PACKET_IKE & packet, BDATA * iv )
  		1 );
  
  	EVP_Cipher(
@@ -253,131 +257,163 @@ index 1ad6a44..ee41e65 100644
  		( int ) size - sizeof( IKE_HEADER ) );
  
 -	EVP_CIPHER_CTX_cleanup( &ctx_cipher );
-+	EVP_CIPHER_CTX_cleanup( ctx_cipher );
- 
+-
  	//
  	// store cipher iv data
+ 	//
 diff --git a/source/iked/ike.exch.config.cpp b/source/iked/ike.exch.config.cpp
-index a9390e7..0f2ed0b 100644
+index a9390e7..1f23fbd 100644
 --- a/source/iked/ike.exch.config.cpp
 +++ b/source/iked/ike.exch.config.cpp
-@@ -2481,15 +2481,14 @@ long _IKED::config_chk_hash( IDB_PH1 * ph1, IDB_CFG * cfg, unsigned long msgid )
+@@ -39,6 +39,8 @@
+  *
+  */
+ 
++#include <memory>
++
+ #include "iked.h"
+ 
+ long _IKED::process_config_recv( IDB_PH1 * ph1, PACKET_IKE & packet, unsigned char payload )
+@@ -2481,15 +2483,14 @@ long _IKED::config_chk_hash( IDB_PH1 * ph1, IDB_CFG * cfg, unsigned long msgid )
  	BDATA hash_c;
  	hash_c.size( ph1->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) &msgid, 4 );
 -	HMAC_Update( &ctx_prf, cfg->hda.buff(), cfg->hda.size() );
 -	HMAC_Final( &ctx_prf, hash_c.buff(), NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) &msgid, 4 );
-+	HMAC_Update( ctx_prf, cfg->hda.buff(), cfg->hda.size() );
-+	HMAC_Final( ctx_prf, hash_c.buff(), NULL );
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) &msgid, 4 );
++	HMAC_Update( ctx_prf.get(), cfg->hda.buff(), cfg->hda.size() );
++	HMAC_Final( ctx_prf.get(), hash_c.buff(), NULL );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -2543,15 +2542,14 @@ long _IKED::config_message_send( IDB_PH1 * ph1, IDB_CFG * cfg )
+@@ -2543,15 +2544,14 @@ long _IKED::config_message_send( IDB_PH1 * ph1, IDB_CFG * cfg )
  	// create message authentication hash
  	//
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) &cfg->msgid, sizeof( cfg->msgid ) );
 -	HMAC_Update( &ctx_prf, packet.buff() + beg, end - beg );
 -	HMAC_Final( &ctx_prf, hash.buff(), 0 );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) &cfg->msgid, sizeof( cfg->msgid ) );
-+	HMAC_Update( ctx_prf, packet.buff() + beg, end - beg );
-+	HMAC_Final( ctx_prf, hash.buff(), 0 );
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) &cfg->msgid, sizeof( cfg->msgid ) );
++	HMAC_Update( ctx_prf.get(), packet.buff() + beg, end - beg );
++	HMAC_Final( ctx_prf.get(), hash.buff(), 0 );
  
  	memcpy( packet.buff() + off + 4, hash.buff(), hash.size() );
  
 diff --git a/source/iked/ike.exch.inform.cpp b/source/iked/ike.exch.inform.cpp
-index 07d963b..f9c153e 100644
+index 07d963b..565659b 100644
 --- a/source/iked/ike.exch.inform.cpp
 +++ b/source/iked/ike.exch.inform.cpp
-@@ -399,15 +399,14 @@ long _IKED::inform_chk_hash( IDB_PH1 * ph1, IDB_XCH * inform )
+@@ -39,6 +39,8 @@
+  *
+  */
+ 
++#include <memory>
++
+ #include "iked.h"
+ 
+ long _IKED::process_inform_send( IDB_PH1 * ph1, IDB_XCH * inform )
+@@ -399,15 +401,15 @@ long _IKED::inform_chk_hash( IDB_PH1 * ph1, IDB_XCH * inform )
  	BDATA hash_c;
  	hash_c.size( ph1->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) &inform->msgid, 4 );
 -	HMAC_Update( &ctx_prf, inform->hda.buff(), inform->hda.size() );
 -	HMAC_Final( &ctx_prf, hash_c.buff(), NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) &inform->msgid, 4 );
-+	HMAC_Update( ctx_prf, inform->hda.buff(), inform->hda.size() );
-+	HMAC_Final( ctx_prf, hash_c.buff(), NULL );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) &inform->msgid, 4 );
++	HMAC_Update( ctx_prf.get(), inform->hda.buff(), inform->hda.size() );
++	HMAC_Final( ctx_prf.get(), hash_c.buff(), NULL );
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -439,15 +438,14 @@ long _IKED::inform_gen_hash( IDB_PH1 * ph1, IDB_XCH * inform )
+@@ -439,15 +441,14 @@ long _IKED::inform_gen_hash( IDB_PH1 * ph1, IDB_XCH * inform )
  {
  	inform->hash_l.size( ph1->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) &inform->msgid, sizeof( inform->msgid ) );
 -	HMAC_Update( &ctx_prf, inform->hda.buff(), inform->hda.size() );
 -	HMAC_Final( &ctx_prf, inform->hash_l.buff(), 0 );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) &inform->msgid, sizeof( inform->msgid ) );
-+	HMAC_Update( ctx_prf, inform->hda.buff(), inform->hda.size() );
-+	HMAC_Final( ctx_prf, inform->hash_l.buff(), 0 );
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) &inform->msgid, sizeof( inform->msgid ) );
++	HMAC_Update( ctx_prf.get(), inform->hda.buff(), inform->hda.size() );
++	HMAC_Final( ctx_prf.get(), inform->hash_l.buff(), 0 );
  
  	log.bin(
  		LLOG_DEBUG,
 diff --git a/source/iked/ike.exch.phase1.cpp b/source/iked/ike.exch.phase1.cpp
-index 47fe020..34565ca 100644
+index 47fe020..3445f26 100644
 --- a/source/iked/ike.exch.phase1.cpp
 +++ b/source/iked/ike.exch.phase1.cpp
-@@ -1044,14 +1044,13 @@ long _IKED::process_phase1_send( IDB_PH1 * ph1 )
+@@ -39,6 +39,8 @@
+  *
+  */
+ 
++#include <memory>
++
+ #include "iked.h"
+ 
+ long _IKED::process_phase1_recv( IDB_PH1 * ph1, PACKET_IKE & packet, unsigned char payload )
+@@ -1044,14 +1046,13 @@ long _IKED::process_phase1_send( IDB_PH1 * ph1 )
  								BDATA psk_hash;
  								psk_hash.size( ph1->hash_size );
  
 -								HMAC_CTX ctx_prf;
 -								HMAC_CTX_init( &ctx_prf );
-+								HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -								HMAC_Init_ex( &ctx_prf, ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
 -								HMAC_Update( &ctx_prf, ph1->tunnel->peer->psk.buff(), ph1->tunnel->peer->psk.size() );
 -								HMAC_Final( &ctx_prf, psk_hash.buff(), NULL );
-+								HMAC_Init_ex( ctx_prf, ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
-+								HMAC_Update( ctx_prf, ph1->tunnel->peer->psk.buff(), ph1->tunnel->peer->psk.size() );
-+								HMAC_Final( ctx_prf, psk_hash.buff(), NULL );
++								std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++								if (!ctx_prf)
++									return LIBIKE_FAILED;
  
 -								HMAC_CTX_cleanup( &ctx_prf );
-+								HMAC_CTX_free( ctx_prf );
++								HMAC_Init_ex( ctx_prf.get(), ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
++								HMAC_Update( ctx_prf.get(), ph1->tunnel->peer->psk.buff(), ph1->tunnel->peer->psk.size() );
++								HMAC_Final( ctx_prf.get(), psk_hash.buff(), NULL );
  
  								//
  								// add the notification payload
-@@ -1557,7 +1556,9 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1557,7 +1558,9 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  	{
  		BDATA prv;
  		prv.size( ph1->dh_size );
@@ -388,67 +424,71 @@ index 47fe020..34565ca 100644
  
  		log.bin(
  			LLOG_DECODE,
-@@ -1656,25 +1657,24 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1656,25 +1659,24 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  		case XAUTH_AUTH_INIT_PSK:
  		case XAUTH_AUTH_RESP_PSK:
  		{
 -			HMAC_CTX ctx_prf;
 -			HMAC_CTX_init( &ctx_prf );
-+			HMAC_CTX * ctx_prf = HMAC_CTX_new();
++			std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++			if (!ctx_prf)
++				return LIBIKE_MEMORY;
  
 -			HMAC_Init_ex( &ctx_prf, ph1->tunnel->peer->psk.buff(), ( int ) ph1->tunnel->peer->psk.size(), ph1->evp_hash, NULL );
-+			HMAC_Init_ex( ctx_prf, ph1->tunnel->peer->psk.buff(), ( int ) ph1->tunnel->peer->psk.size(), ph1->evp_hash, NULL );
++			HMAC_Init_ex( ctx_prf.get(), ph1->tunnel->peer->psk.buff(), ( int ) ph1->tunnel->peer->psk.size(), ph1->evp_hash, NULL );
  
  			if( ph1->initiator )
  			{
 -				HMAC_Update( &ctx_prf, ph1->nonce_l.buff(), ph1->nonce_l.size() );
 -				HMAC_Update( &ctx_prf, ph1->nonce_r.buff(), ph1->nonce_r.size() );
-+				HMAC_Update( ctx_prf, ph1->nonce_l.buff(), ph1->nonce_l.size() );
-+				HMAC_Update( ctx_prf, ph1->nonce_r.buff(), ph1->nonce_r.size() );
++				HMAC_Update( ctx_prf.get(), ph1->nonce_l.buff(), ph1->nonce_l.size() );
++				HMAC_Update( ctx_prf.get(), ph1->nonce_r.buff(), ph1->nonce_r.size() );
  			}
  			else
  			{
 -				HMAC_Update( &ctx_prf, ph1->nonce_r.buff(), ph1->nonce_r.size() );
 -				HMAC_Update( &ctx_prf, ph1->nonce_l.buff(), ph1->nonce_l.size() );
-+				HMAC_Update( ctx_prf, ph1->nonce_r.buff(), ph1->nonce_r.size() );
-+				HMAC_Update( ctx_prf, ph1->nonce_l.buff(), ph1->nonce_l.size() );
++				HMAC_Update( ctx_prf.get(), ph1->nonce_r.buff(), ph1->nonce_r.size() );
++				HMAC_Update( ctx_prf.get(), ph1->nonce_l.buff(), ph1->nonce_l.size() );
  			}
  
 -			HMAC_Final( &ctx_prf, skeyid_data, NULL );
-+			HMAC_Final( ctx_prf, skeyid_data, NULL );
- 
+-
 -			HMAC_CTX_cleanup( &ctx_prf );
-+			HMAC_CTX_free( ctx_prf );
++			HMAC_Final( ctx_prf.get(), skeyid_data, NULL );
  
  			break;
  		}
-@@ -1704,14 +1704,13 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1704,14 +1706,13 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  				nonce.add( ph1->nonce_l );
  			}
  
 -			HMAC_CTX ctx_prf;
 -			HMAC_CTX_init( &ctx_prf );
-+			HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -			HMAC_Init_ex( &ctx_prf, nonce.buff(), ( int ) nonce.size(), ph1->evp_hash, NULL );
 -			HMAC_Update( &ctx_prf, shared.buff(), shared.size() );
 -			HMAC_Final( &ctx_prf, skeyid_data, NULL );
-+			HMAC_Init_ex( ctx_prf, nonce.buff(), ( int ) nonce.size(), ph1->evp_hash, NULL );
-+			HMAC_Update( ctx_prf, shared.buff(), shared.size() );
-+			HMAC_Final( ctx_prf, skeyid_data, NULL );
++			std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++			if (!ctx_prf)
++				return LIBIKE_MEMORY;
  
 -			HMAC_CTX_cleanup( &ctx_prf );
-+			HMAC_CTX_free( ctx_prf );
++			HMAC_Init_ex( ctx_prf.get(), nonce.buff(), ( int ) nonce.size(), ph1->evp_hash, NULL );
++			HMAC_Update( ctx_prf.get(), shared.buff(), shared.size() );
++			HMAC_Final( ctx_prf.get(), skeyid_data, NULL );
  
  			break;
  		}	
-@@ -1730,15 +1729,14 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1730,15 +1731,16 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  	// compute SKEYID_d
  	//
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, shared.buff(), shared.size() );
@@ -456,16 +496,16 @@ index 47fe020..34565ca 100644
 -	HMAC_Update( &ctx_prf, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) "\0", 1 );
 -	HMAC_Final( &ctx_prf, skeyid_data, NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, shared.buff(), shared.size() );
-+	HMAC_Update( ctx_prf, ph1->cookies.i, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) "\0", 1 );
-+	HMAC_Final( ctx_prf, skeyid_data, NULL );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), shared.buff(), shared.size() );
++	HMAC_Update( ctx_prf.get(), ph1->cookies.i, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), ph1->cookies.r, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) "\0", 1 );
++	HMAC_Final( ctx_prf.get(), skeyid_data, NULL );
  
  	ph1->skeyid_d.set( skeyid_data, skeyid_size );
  
-@@ -1753,13 +1751,13 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1753,13 +1755,13 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  	// compute SKEYID_a
  	//
  
@@ -476,17 +516,17 @@ index 47fe020..34565ca 100644
 -	HMAC_Update( &ctx_prf, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) "\1", 1 );
 -	HMAC_Final( &ctx_prf, skeyid_data, NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, skeyid_data, skeyid_size );
-+	HMAC_Update( ctx_prf, shared.buff(), shared.size() );
-+	HMAC_Update( ctx_prf, ph1->cookies.i, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) "\1", 1 );
-+	HMAC_Final( ctx_prf, skeyid_data, NULL );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), skeyid_data, skeyid_size );
++	HMAC_Update( ctx_prf.get(), shared.buff(), shared.size() );
++	HMAC_Update( ctx_prf.get(), ph1->cookies.i, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), ph1->cookies.r, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) "\1", 1 );
++	HMAC_Final( ctx_prf.get(), skeyid_data, NULL );
  
  	ph1->skeyid_a.set( skeyid_data, skeyid_size );
  
-@@ -1774,13 +1772,13 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1774,13 +1776,13 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  	// compute SKEYID_e
  	//
  
@@ -497,102 +537,106 @@ index 47fe020..34565ca 100644
 -	HMAC_Update( &ctx_prf, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) "\2", 1 );
 -	HMAC_Final( &ctx_prf, skeyid_data, NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, skeyid_data, skeyid_size );
-+	HMAC_Update( ctx_prf, shared.buff(), shared.size() );
-+	HMAC_Update( ctx_prf, ph1->cookies.i, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) "\2", 1 );
-+	HMAC_Final( ctx_prf, skeyid_data, NULL );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid.buff(), ( int ) ph1->skeyid.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), skeyid_data, skeyid_size );
++	HMAC_Update( ctx_prf.get(), shared.buff(), shared.size() );
++	HMAC_Update( ctx_prf.get(), ph1->cookies.i, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), ph1->cookies.r, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) "\2", 1 );
++	HMAC_Final( ctx_prf.get(), skeyid_data, NULL );
  
  	ph1->skeyid_e.set( skeyid_data, skeyid_size );
  
-@@ -1821,15 +1819,15 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1821,15 +1823,15 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  
  		// create extended key data
  
 -		HMAC_Init_ex( &ctx_prf, skeyid_data, skeyid_size, ph1->evp_hash, NULL );
 -		HMAC_Update( &ctx_prf, ( unsigned char * ) "\0", 1 );
 -		HMAC_Final( &ctx_prf, key_data, NULL );
-+		HMAC_Init_ex( ctx_prf, skeyid_data, skeyid_size, ph1->evp_hash, NULL );
-+		HMAC_Update( ctx_prf, ( unsigned char * ) "\0", 1 );
-+		HMAC_Final( ctx_prf, key_data, NULL );
++		HMAC_Init_ex( ctx_prf.get(), skeyid_data, skeyid_size, ph1->evp_hash, NULL );
++		HMAC_Update( ctx_prf.get(), ( unsigned char * ) "\0", 1 );
++		HMAC_Final( ctx_prf.get(), key_data, NULL );
  
  		for( long size = skeyid_size; size < key_size; size += skeyid_size )
  		{
 -			HMAC_Init_ex( &ctx_prf, skeyid_data, skeyid_size, ph1->evp_hash, NULL );
 -			HMAC_Update( &ctx_prf, key_data + size - skeyid_size, skeyid_size );
 -			HMAC_Final( &ctx_prf, key_data + size, NULL );
-+			HMAC_Init_ex( ctx_prf, skeyid_data, skeyid_size, ph1->evp_hash, NULL );
-+			HMAC_Update( ctx_prf, key_data + size - skeyid_size, skeyid_size );
-+			HMAC_Final( ctx_prf, key_data + size, NULL );
++			HMAC_Init_ex( ctx_prf.get(), skeyid_data, skeyid_size, ph1->evp_hash, NULL );
++			HMAC_Update( ctx_prf.get(), key_data + size - skeyid_size, skeyid_size );
++			HMAC_Final( ctx_prf.get(), key_data + size, NULL );
  		}
  	}
  	else
-@@ -1839,7 +1837,7 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+@@ -1839,8 +1841,6 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  		memcpy( key_data, skeyid_data, key_size );
  	}
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
- 
+-
  	if( proposal->ciph_kl )
  		key_size = ( proposal->ciph_kl + 7 ) / 8;
-@@ -1860,22 +1858,22 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
+ 
+@@ -1860,22 +1860,24 @@ long _IKED::phase1_gen_keys( IDB_PH1 * ph1 )
  	unsigned char iv_data[ HMAC_MAX_MD_CBLOCK ];
  	unsigned long iv_size = EVP_CIPHER_iv_length( ph1->evp_cipher );
  
 -	EVP_MD_CTX ctx_hash;
 -	EVP_DigestInit( &ctx_hash, ph1->evp_hash );
-+	EVP_MD_CTX * ctx_hash = EVP_MD_CTX_new();
-+	EVP_DigestInit( ctx_hash, ph1->evp_hash );
++	std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx_hash {EVP_MD_CTX_new(), EVP_MD_CTX_free};
++	if (!ctx_hash)
++		return LIBIKE_MEMORY;
++
++	EVP_DigestInit( ctx_hash.get(), ph1->evp_hash );
  
  	if( ph1->initiator )
  	{
 -		EVP_DigestUpdate( &ctx_hash, ph1->xl.buff(), ph1->xl.size() );
 -		EVP_DigestUpdate( &ctx_hash, ph1->xr.buff(), ph1->xr.size() );
-+		EVP_DigestUpdate( ctx_hash, ph1->xl.buff(), ph1->xl.size() );
-+		EVP_DigestUpdate( ctx_hash, ph1->xr.buff(), ph1->xr.size() );
++		EVP_DigestUpdate( ctx_hash.get(), ph1->xl.buff(), ph1->xl.size() );
++		EVP_DigestUpdate( ctx_hash.get(), ph1->xr.buff(), ph1->xr.size() );
  	}
  	else
  	{
 -		EVP_DigestUpdate( &ctx_hash, ph1->xr.buff(), ph1->xr.size() );
 -		EVP_DigestUpdate( &ctx_hash, ph1->xl.buff(), ph1->xl.size() );
-+		EVP_DigestUpdate( ctx_hash, ph1->xr.buff(), ph1->xr.size() );
-+		EVP_DigestUpdate( ctx_hash, ph1->xl.buff(), ph1->xl.size() );
++		EVP_DigestUpdate( ctx_hash.get(), ph1->xr.buff(), ph1->xr.size() );
++		EVP_DigestUpdate( ctx_hash.get(), ph1->xl.buff(), ph1->xl.size() );
  	}
  
 -	EVP_DigestFinal( &ctx_hash, iv_data, NULL );
 -	EVP_MD_CTX_cleanup( &ctx_hash );
-+	EVP_DigestFinal( ctx_hash, iv_data, NULL );
-+	EVP_MD_CTX_free( ctx_hash );
++	EVP_DigestFinal( ctx_hash.get(), iv_data, NULL );
  
  	ph1->iv.set( iv_data, iv_size );
  
-@@ -1903,29 +1901,28 @@ long _IKED::phase1_gen_hash_i( IDB_PH1 * sa, BDATA & hash )
+@@ -1903,29 +1905,28 @@ long _IKED::phase1_gen_hash_i( IDB_PH1 * sa, BDATA & hash )
  
  	hash.size( sa->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new ();
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_Init_ex( &ctx_prf, sa->skeyid.buff(), ( int ) sa->skeyid.size(), sa->evp_hash, NULL );
-+	HMAC_Init_ex( ctx_prf, sa->skeyid.buff(), ( int ) sa->skeyid.size(), sa->evp_hash, NULL );
++	HMAC_Init_ex( ctx_prf.get(), sa->skeyid.buff(), ( int ) sa->skeyid.size(), sa->evp_hash, NULL );
  
  	if( sa->initiator )
  	{
 -		HMAC_Update( &ctx_prf, sa->xl.buff(), sa->xl.size() );
 -		HMAC_Update( &ctx_prf, sa->xr.buff(), sa->xr.size() );
-+		HMAC_Update( ctx_prf, sa->xl.buff(), sa->xl.size() );
-+		HMAC_Update( ctx_prf, sa->xr.buff(), sa->xr.size() );
++		HMAC_Update( ctx_prf.get(), sa->xl.buff(), sa->xl.size() );
++		HMAC_Update( ctx_prf.get(), sa->xr.buff(), sa->xr.size() );
  	}
  	else
  	{
 -		HMAC_Update( &ctx_prf, sa->xr.buff(), sa->xr.size() );
 -		HMAC_Update( &ctx_prf, sa->xl.buff(), sa->xl.size() );
-+		HMAC_Update( ctx_prf, sa->xr.buff(), sa->xr.size() );
-+		HMAC_Update( ctx_prf, sa->xl.buff(), sa->xl.size() );
++		HMAC_Update( ctx_prf.get(), sa->xr.buff(), sa->xr.size() );
++		HMAC_Update( ctx_prf.get(), sa->xl.buff(), sa->xl.size() );
  	}
  
 -	HMAC_Update( &ctx_prf, sa->cookies.i, ISAKMP_COOKIE_SIZE );
@@ -600,41 +644,42 @@ index 47fe020..34565ca 100644
 -	HMAC_Update( &ctx_prf, sa->hda.buff(), sa->hda.size() );
 -	HMAC_Update( &ctx_prf, sa->idi.buff(), sa->idi.size() );
 -	HMAC_Final( &ctx_prf, hash.buff(), NULL );
-+	HMAC_Update( ctx_prf, sa->cookies.i, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, sa->cookies.r, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, sa->hda.buff(), sa->hda.size() );
-+	HMAC_Update( ctx_prf, sa->idi.buff(), sa->idi.size() );
-+	HMAC_Final( ctx_prf, hash.buff(), NULL );
- 
+-
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Update( ctx_prf.get(), sa->cookies.i, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), sa->cookies.r, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), sa->hda.buff(), sa->hda.size() );
++	HMAC_Update( ctx_prf.get(), sa->idi.buff(), sa->idi.size() );
++	HMAC_Final( ctx_prf.get(), hash.buff(), NULL );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -1945,29 +1942,28 @@ long _IKED::phase1_gen_hash_r( IDB_PH1 * sa, BDATA & hash )
+@@ -1945,29 +1946,28 @@ long _IKED::phase1_gen_hash_r( IDB_PH1 * sa, BDATA & hash )
  
  	hash.size( sa->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_Init_ex( &ctx_prf, sa->skeyid.buff(), ( int ) sa->skeyid.size(), sa->evp_hash, NULL );
-+	HMAC_Init_ex( ctx_prf, sa->skeyid.buff(), ( int ) sa->skeyid.size(), sa->evp_hash, NULL );
++	HMAC_Init_ex( ctx_prf.get(), sa->skeyid.buff(), ( int ) sa->skeyid.size(), sa->evp_hash, NULL );
  
  	if( sa->initiator )
  	{
 -		HMAC_Update( &ctx_prf, sa->xr.buff(), sa->xr.size() );
 -		HMAC_Update( &ctx_prf, sa->xl.buff(), sa->xl.size() );
-+		HMAC_Update( ctx_prf, sa->xr.buff(), sa->xr.size() );
-+		HMAC_Update( ctx_prf, sa->xl.buff(), sa->xl.size() );
++		HMAC_Update( ctx_prf.get(), sa->xr.buff(), sa->xr.size() );
++		HMAC_Update( ctx_prf.get(), sa->xl.buff(), sa->xl.size() );
  	}
  	else
  	{
 -		HMAC_Update( &ctx_prf, sa->xl.buff(), sa->xl.size() );
 -		HMAC_Update( &ctx_prf, sa->xr.buff(), sa->xr.size() );
-+		HMAC_Update( ctx_prf, sa->xl.buff(), sa->xl.size() );
-+		HMAC_Update( ctx_prf, sa->xr.buff(), sa->xr.size() );
++		HMAC_Update( ctx_prf.get(), sa->xl.buff(), sa->xl.size() );
++		HMAC_Update( ctx_prf.get(), sa->xr.buff(), sa->xr.size() );
  	}
  
 -	HMAC_Update( &ctx_prf, sa->cookies.r, ISAKMP_COOKIE_SIZE );
@@ -642,18 +687,17 @@ index 47fe020..34565ca 100644
 -	HMAC_Update( &ctx_prf, sa->hda.buff(), sa->hda.size() );
 -	HMAC_Update( &ctx_prf, sa->idr.buff(), sa->idr.size() );
 -	HMAC_Final( &ctx_prf, hash.buff(), NULL );
-+	HMAC_Update( ctx_prf, sa->cookies.r, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, sa->cookies.i, ISAKMP_COOKIE_SIZE );
-+	HMAC_Update( ctx_prf, sa->hda.buff(), sa->hda.size() );
-+	HMAC_Update( ctx_prf, sa->idr.buff(), sa->idr.size() );
-+	HMAC_Final( ctx_prf, hash.buff(), NULL );
- 
+-
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Update( ctx_prf.get(), sa->cookies.r, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), sa->cookies.i, ISAKMP_COOKIE_SIZE );
++	HMAC_Update( ctx_prf.get(), sa->hda.buff(), sa->hda.size() );
++	HMAC_Update( ctx_prf.get(), sa->idr.buff(), sa->idr.size() );
++	HMAC_Final( ctx_prf.get(), hash.buff(), NULL );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -2569,14 +2565,14 @@ long _IKED::phase1_gen_natd( IDB_PH1 * ph1 )
+@@ -2569,14 +2569,17 @@ long _IKED::phase1_gen_natd( IDB_PH1 * ph1 )
  	// hash for remote address
  	//
  
@@ -665,18 +709,21 @@ index 47fe020..34565ca 100644
 -	EVP_DigestUpdate( &ctx_hash, &ph1->tunnel->saddr_r.saddr4.sin_port, 2 );
 -	EVP_DigestFinal( &ctx_hash, natd.buff(), NULL );
 -	EVP_MD_CTX_cleanup( &ctx_hash );
-+	EVP_MD_CTX * ctx_hash = EVP_MD_CTX_new();
-+	EVP_DigestInit( ctx_hash, ph1->evp_hash );
-+	EVP_DigestUpdate( ctx_hash, ph1->cookies.i, ISAKMP_COOKIE_SIZE );
-+	EVP_DigestUpdate( ctx_hash, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
-+	EVP_DigestUpdate( ctx_hash, &ph1->tunnel->saddr_r.saddr4.sin_addr.s_addr, 4 );
-+	EVP_DigestUpdate( ctx_hash, &ph1->tunnel->saddr_r.saddr4.sin_port, 2 );
-+	EVP_DigestFinal( ctx_hash, natd.buff(), NULL );
-+	EVP_MD_CTX_reset( ctx_hash );
++	std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx_hash {EVP_MD_CTX_new(), EVP_MD_CTX_free};
++	if (!ctx_hash)
++		return LIBIKE_MEMORY;
++
++	EVP_DigestInit( ctx_hash.get(), ph1->evp_hash );
++	EVP_DigestUpdate( ctx_hash.get(), ph1->cookies.i, ISAKMP_COOKIE_SIZE );
++	EVP_DigestUpdate( ctx_hash.get(), ph1->cookies.r, ISAKMP_COOKIE_SIZE );
++	EVP_DigestUpdate( ctx_hash.get(), &ph1->tunnel->saddr_r.saddr4.sin_addr.s_addr, 4 );
++	EVP_DigestUpdate( ctx_hash.get(), &ph1->tunnel->saddr_r.saddr4.sin_port, 2 );
++	EVP_DigestFinal( ctx_hash.get(), natd.buff(), NULL );
++	EVP_MD_CTX_reset( ctx_hash.get() );
  
  	ph1->natd_hash_l.add( natd );
  
-@@ -2585,13 +2581,13 @@ long _IKED::phase1_gen_natd( IDB_PH1 * ph1 )
+@@ -2585,13 +2588,12 @@ long _IKED::phase1_gen_natd( IDB_PH1 * ph1 )
  	// hash for local address
  	//
  
@@ -687,81 +734,92 @@ index 47fe020..34565ca 100644
 -	EVP_DigestUpdate( &ctx_hash, &ph1->tunnel->saddr_l.saddr4.sin_port, 2 );
 -	EVP_DigestFinal( &ctx_hash, natd.buff(), NULL );
 -	EVP_MD_CTX_cleanup( &ctx_hash );
-+	EVP_DigestInit( ctx_hash, ph1->evp_hash );
-+	EVP_DigestUpdate( ctx_hash, ph1->cookies.i, ISAKMP_COOKIE_SIZE );
-+	EVP_DigestUpdate( ctx_hash, ph1->cookies.r, ISAKMP_COOKIE_SIZE );
-+	EVP_DigestUpdate( ctx_hash, &ph1->tunnel->saddr_l.saddr4.sin_addr.s_addr, 4 );
-+	EVP_DigestUpdate( ctx_hash, &ph1->tunnel->saddr_l.saddr4.sin_port, 2 );
-+	EVP_DigestFinal( ctx_hash, natd.buff(), NULL );
-+	EVP_MD_CTX_free( ctx_hash );
++	EVP_DigestInit( ctx_hash.get(), ph1->evp_hash );
++	EVP_DigestUpdate( ctx_hash.get(), ph1->cookies.i, ISAKMP_COOKIE_SIZE );
++	EVP_DigestUpdate( ctx_hash.get(), ph1->cookies.r, ISAKMP_COOKIE_SIZE );
++	EVP_DigestUpdate( ctx_hash.get(), &ph1->tunnel->saddr_l.saddr4.sin_addr.s_addr, 4 );
++	EVP_DigestUpdate( ctx_hash.get(), &ph1->tunnel->saddr_l.saddr4.sin_port, 2 );
++	EVP_DigestFinal( ctx_hash.get(), natd.buff(), NULL );
  
  	ph1->natd_hash_l.add( natd );
  
 diff --git a/source/iked/ike.exch.phase2.cpp b/source/iked/ike.exch.phase2.cpp
-index 19a5ad5..a974191 100644
+index 19a5ad5..76bfd96 100644
 --- a/source/iked/ike.exch.phase2.cpp
 +++ b/source/iked/ike.exch.phase2.cpp
-@@ -1008,14 +1008,13 @@ long _IKED::phase2_gen_hash_i( IDB_PH1 * ph1, IDB_PH2 * ph2, BDATA & hash )
+@@ -39,6 +39,8 @@
+  *
+  */
+ 
++#include <memory>
++
+ #include "iked.h"
+ 
+ long _IKED::process_phase2_recv( IDB_PH1 * ph1, PACKET_IKE & packet, unsigned char payload )
+@@ -1008,14 +1010,13 @@ long _IKED::phase2_gen_hash_i( IDB_PH1 * ph1, IDB_PH2 * ph2, BDATA & hash )
  
  	hash.size( ph1->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, input.buff(), input.size() );
 -	HMAC_Final( &ctx_prf, hash.buff(), NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, input.buff(), input.size() );
-+	HMAC_Final( ctx_prf, hash.buff(), NULL );
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), input.buff(), input.size() );
++	HMAC_Final( ctx_prf.get(), hash.buff(), NULL );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -1048,14 +1047,13 @@ long _IKED::phase2_gen_hash_r( IDB_PH1 * ph1, IDB_PH2 * ph2, BDATA & hash )
+@@ -1048,14 +1049,13 @@ long _IKED::phase2_gen_hash_r( IDB_PH1 * ph1, IDB_PH2 * ph2, BDATA & hash )
  
  	hash.size( ph1->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
- 
+-
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, input.buff(), input.size() );
 -	HMAC_Final( &ctx_prf, hash.buff(), NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, input.buff(), input.size() );
-+	HMAC_Final( ctx_prf, hash.buff(), NULL );
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), input.buff(), input.size() );
++	HMAC_Final( ctx_prf.get(), hash.buff(), NULL );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -1093,14 +1091,13 @@ long _IKED::phase2_gen_hash_p( IDB_PH1 * ph1, IDB_PH2 * ph2, BDATA & hash )
+@@ -1093,14 +1093,13 @@ long _IKED::phase2_gen_hash_p( IDB_PH1 * ph1, IDB_PH2 * ph2, BDATA & hash )
  
  	hash.size( ph1->hash_size );
  
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
 -	HMAC_Update( &ctx_prf, input.buff(), input.size() );
 -	HMAC_Final( &ctx_prf, hash.buff(), 0 );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
-+	HMAC_Update( ctx_prf, input.buff(), input.size() );
-+	HMAC_Final( ctx_prf, hash.buff(), 0 );
- 
+-
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_a.buff(), ( int ) ph1->skeyid_a.size(), ph1->evp_hash, NULL );
++	HMAC_Update( ctx_prf.get(), input.buff(), input.size() );
++	HMAC_Final( ctx_prf.get(), hash.buff(), 0 );
  
  	log.bin(
  		LLOG_DEBUG,
-@@ -1555,7 +1552,9 @@ long _IKED::phase2_gen_keys( IDB_PH1 * ph1, IDB_PH2 * ph2 )
+@@ -1555,7 +1554,9 @@ long _IKED::phase2_gen_keys( IDB_PH1 * ph1, IDB_PH2 * ph2 )
  		{
  			BDATA prv;
  			prv.size( ph2->dh_size );
@@ -772,89 +830,100 @@ index 19a5ad5..a974191 100644
  
  			log.bin(
  				LLOG_DECODE,
-@@ -1817,56 +1816,55 @@ long _IKED::phase2_gen_keys( IDB_PH1 * ph1, IDB_PH2 * ph2, long dir, IKE_PROPOSA
+@@ -1817,57 +1818,56 @@ long _IKED::phase2_gen_keys( IDB_PH1 * ph1, IDB_PH2 * ph2, long dir, IKE_PROPOSA
  	// K3 = prf( SKEYID_d, K2 | [ g(qm)^xy | ] protocol | SPI | Ni_b | Nr_b )
  	//
  	
 -	HMAC_CTX ctx_prf;
 -	HMAC_CTX_init( &ctx_prf );
-+	HMAC_CTX * ctx_prf = HMAC_CTX_new();
++	std::unique_ptr<HMAC_CTX, decltype(&HMAC_CTX_free)> ctx_prf {HMAC_CTX_new(), HMAC_CTX_free};
++	if (!ctx_prf)
++		return LIBIKE_MEMORY;
  
 -	HMAC_Init_ex( &ctx_prf, ph1->skeyid_d.buff(), ( int ) ph1->skeyid_d.size(), ph1->evp_hash, NULL );
-+	HMAC_Init_ex( ctx_prf, ph1->skeyid_d.buff(), ( int ) ph1->skeyid_d.size(), ph1->evp_hash, NULL );
++	HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_d.buff(), ( int ) ph1->skeyid_d.size(), ph1->evp_hash, NULL );
  
  	if( ph2->dhgr_id )
 -		HMAC_Update( &ctx_prf, shared.buff(), shared.size() );
-+		HMAC_Update( ctx_prf, shared.buff(), shared.size() );
++		HMAC_Update( ctx_prf.get(), shared.buff(), shared.size() );
  
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) &proposal->proto, 1 );
 -	HMAC_Update( &ctx_prf, ( unsigned char * ) &proposal->spi, 4 );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) &proposal->proto, 1 );
-+	HMAC_Update( ctx_prf, ( unsigned char * ) &proposal->spi, 4 );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) &proposal->proto, 1 );
++	HMAC_Update( ctx_prf.get(), ( unsigned char * ) &proposal->spi, 4 );
  
  	if( ph2->initiator )
  	{
 -		HMAC_Update( &ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
 -		HMAC_Update( &ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
-+		HMAC_Update( ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
-+		HMAC_Update( ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
++		HMAC_Update( ctx_prf.get(), ph2->nonce_l.buff(), ph2->nonce_l.size() );
++		HMAC_Update( ctx_prf.get(), ph2->nonce_r.buff(), ph2->nonce_r.size() );
  	}
  	else
  	{
 -		HMAC_Update( &ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
 -		HMAC_Update( &ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
-+		HMAC_Update( ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
-+		HMAC_Update( ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
++		HMAC_Update( ctx_prf.get(), ph2->nonce_r.buff(), ph2->nonce_r.size() );
++		HMAC_Update( ctx_prf.get(), ph2->nonce_l.buff(), ph2->nonce_l.size() );
  	}
  
 -	HMAC_Final( &ctx_prf, key_data, NULL );
-+	HMAC_Final( ctx_prf, key_data, NULL );
++	HMAC_Final( ctx_prf.get(), key_data, NULL );
  
  	for( long size = skeyid_size; size < key_size; size += skeyid_size )
  	{
 -		HMAC_Init_ex( &ctx_prf, ph1->skeyid_d.buff(), ( int ) ph1->skeyid_d.size(), ph1->evp_hash, NULL );
 -		HMAC_Update( &ctx_prf, key_data + size - skeyid_size, skeyid_size );
-+		HMAC_Init_ex( ctx_prf, ph1->skeyid_d.buff(), ( int ) ph1->skeyid_d.size(), ph1->evp_hash, NULL );
-+		HMAC_Update( ctx_prf, key_data + size - skeyid_size, skeyid_size );
++		HMAC_Init_ex( ctx_prf.get(), ph1->skeyid_d.buff(), ( int ) ph1->skeyid_d.size(), ph1->evp_hash, NULL );
++		HMAC_Update( ctx_prf.get(), key_data + size - skeyid_size, skeyid_size );
  
  		if( ph2->dhgr_id )
 -			HMAC_Update( &ctx_prf, shared.buff(), shared.size() );
-+			HMAC_Update( ctx_prf, shared.buff(), shared.size() );
++			HMAC_Update( ctx_prf.get(), shared.buff(), shared.size() );
  
 -		HMAC_Update( &ctx_prf, ( unsigned char * ) &proposal->proto, 1 );
 -		HMAC_Update( &ctx_prf, ( unsigned char * ) &proposal->spi, 4 );
-+		HMAC_Update( ctx_prf, ( unsigned char * ) &proposal->proto, 1 );
-+		HMAC_Update( ctx_prf, ( unsigned char * ) &proposal->spi, 4 );
++		HMAC_Update( ctx_prf.get(), ( unsigned char * ) &proposal->proto, 1 );
++		HMAC_Update( ctx_prf.get(), ( unsigned char * ) &proposal->spi, 4 );
  
  		if( ph2->initiator )
  		{
 -			HMAC_Update( &ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
 -			HMAC_Update( &ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
-+			HMAC_Update( ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
-+			HMAC_Update( ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
++			HMAC_Update( ctx_prf.get(), ph2->nonce_l.buff(), ph2->nonce_l.size() );
++			HMAC_Update( ctx_prf.get(), ph2->nonce_r.buff(), ph2->nonce_r.size() );
  		}
  		else
  		{
 -			HMAC_Update( &ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
 -			HMAC_Update( &ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
-+			HMAC_Update( ctx_prf, ph2->nonce_r.buff(), ph2->nonce_r.size() );
-+			HMAC_Update( ctx_prf, ph2->nonce_l.buff(), ph2->nonce_l.size() );
++			HMAC_Update( ctx_prf.get(), ph2->nonce_r.buff(), ph2->nonce_r.size() );
++			HMAC_Update( ctx_prf.get(), ph2->nonce_l.buff(), ph2->nonce_l.size() );
  		}
  
 -		HMAC_Final( &ctx_prf, key_data + size, 0 );
-+		HMAC_Final( ctx_prf, key_data + size, 0 );
++		HMAC_Final( ctx_prf.get(), key_data + size, 0 );
  	}
  
 -	HMAC_CTX_cleanup( &ctx_prf );
-+	HMAC_CTX_free( ctx_prf );
- 
+-
  	//
  	// separate encrypt and auth key data
+ 	//
 diff --git a/source/iked/ike.idb.exch.cpp b/source/iked/ike.idb.exch.cpp
-index d237e41..c8e0294 100644
+index d237e41..8ac5b5a 100644
 --- a/source/iked/ike.idb.exch.cpp
 +++ b/source/iked/ike.idb.exch.cpp
-@@ -134,12 +134,12 @@ bool _IDB_XCH::new_msgiv( IDB_PH1 * ph1 )
+@@ -39,6 +39,8 @@
+  *
+  */
+ 
++#include <memory>
++
+ #include "iked.h"
+ 
+ //==============================================================================
+@@ -134,12 +136,14 @@ bool _IDB_XCH::new_msgiv( IDB_PH1 * ph1 )
  	unsigned char iv_data[ EVP_MAX_MD_SIZE ];
  	unsigned long iv_size = EVP_CIPHER_iv_length( ph1->evp_cipher );
  
@@ -864,12 +933,14 @@ index d237e41..c8e0294 100644
 -	EVP_DigestUpdate( &ctx_hash, &msgid, 4 );
 -	EVP_DigestFinal( &ctx_hash, iv_data, NULL );
 -	EVP_MD_CTX_cleanup( &ctx_hash );
-+	EVP_MD_CTX * ctx_hash = EVP_MD_CTX_new();
-+	EVP_DigestInit( ctx_hash, ph1->evp_hash );
-+	EVP_DigestUpdate( ctx_hash, ph1->iv.buff(), ph1->iv.size() );
-+	EVP_DigestUpdate( ctx_hash, &msgid, 4 );
-+	EVP_DigestFinal( ctx_hash, iv_data, NULL );
-+	EVP_MD_CTX_free( ctx_hash );
++	std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx_hash {EVP_MD_CTX_new(), EVP_MD_CTX_free};
++	if (!ctx_hash)
++		return false; // or abort? clients' don't seem to check the return code anyway...
++
++	EVP_DigestInit( ctx_hash.get(), ph1->evp_hash );
++	EVP_DigestUpdate( ctx_hash.get(), ph1->iv.buff(), ph1->iv.size() );
++	EVP_DigestUpdate( ctx_hash.get(), &msgid, 4 );
++	EVP_DigestFinal( ctx_hash.get(), iv_data, NULL );
  
  	iv.set( iv_data, iv_size );
  
@@ -1011,36 +1082,41 @@ index c9ea803..eab7821 100644
  	EVP_PKEY_free( evp_pkey );
  
 diff --git a/source/libike/manager.file.cpp b/source/libike/manager.file.cpp
-index 67a50ad..4bddf6d 100644
+index 67a50ad..7fd3dc3 100644
 --- a/source/libike/manager.file.cpp
 +++ b/source/libike/manager.file.cpp
-@@ -679,11 +679,11 @@ bool _CONFIG_MANAGER::file_pcf_load( CONFIG & config, const char * path, bool &
+@@ -39,6 +39,8 @@
+  *
+  */
+ 
++#include <memory>
++
+ #include "config.h"
+ #include "openssl/rand.h"
+ #include "openssl/hmac.h"
+@@ -679,11 +681,13 @@ bool _CONFIG_MANAGER::file_pcf_load( CONFIG & config, const char * path, bool &
  			BDATA pwd;
  			data.get( pwd );
  
 -			EVP_CIPHER_CTX ctx_cipher;
 -			EVP_CIPHER_CTX_init( &ctx_cipher );
-+			EVP_CIPHER_CTX * ctx_cipher = EVP_CIPHER_CTX_new();
-+			EVP_CIPHER_CTX_init( ctx_cipher );
++			std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)> ctx_cipher {EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free};
++			if (!ctx_cipher)
++				return false;
++			EVP_CIPHER_CTX_init( ctx_cipher.get() );
  
  			EVP_CipherInit_ex(
 -				&ctx_cipher,
-+				ctx_cipher,
++				ctx_cipher.get(),
  				EVP_des_ede3_cbc(),
  				NULL,
  				key,
-@@ -691,11 +691,13 @@ bool _CONFIG_MANAGER::file_pcf_load( CONFIG & config, const char * path, bool &
+@@ -691,7 +695,7 @@ bool _CONFIG_MANAGER::file_pcf_load( CONFIG & config, const char * path, bool &
  				0 );
  
  			EVP_Cipher(
 -				&ctx_cipher,
-+				ctx_cipher,
++				ctx_cipher.get(),
  				pwd.buff(),
  				pwd.buff(),
  				( unsigned int ) pwd.size() );
- 
-+			EVP_CIPHER_CTX_free( ctx_cipher );
-+
- 			pwlen -= pwd.buff()[ pwd.size() - 1 ];
- 			pwd.size( pwlen );
- 
