@@ -3,7 +3,7 @@ Date: Fri, 20 Jul 2018 12:04:16 +0100
 Subject: openssl-1.1-port
 
 ---
- source/iked/crypto.cpp          |  87 ++++++++--------
+ source/iked/crypto.cpp          |  95 +++++++++---------
  source/iked/ike.cpp             |  30 +++---
  source/iked/ike.exch.config.cpp |  32 +++---
  source/iked/ike.exch.inform.cpp |  31 +++---
@@ -14,10 +14,10 @@ Subject: openssl-1.1-port
  source/iked/ike.idb.phase2.cpp  |   4 +-
  source/iked/ike.keyfile.cpp     |  32 +++---
  source/libike/manager.file.cpp  |  12 ++-
- 11 files changed, 286 insertions(+), 266 deletions(-)
+ 11 files changed, 292 insertions(+), 268 deletions(-)
 
 diff --git a/source/iked/crypto.cpp b/source/iked/crypto.cpp
-index 421e34f..9bac314 100644
+index 421e34f..9d9ea2f 100644
 --- a/source/iked/crypto.cpp
 +++ b/source/iked/crypto.cpp
 @@ -39,6 +39,8 @@
@@ -29,22 +29,21 @@ index 421e34f..9bac314 100644
  #include "crypto.h"
  
  void crypto_init()
-@@ -372,97 +374,92 @@ static unsigned char group18[] =
+@@ -372,97 +374,96 @@ static unsigned char group18[] =
  
  bool dh_init( long group, DH ** dh_data, long * dh_size )
  {
 -	DH * dh = DH_new();
 -	if( dh == NULL )
-+	std::unique_ptr<DH, decltype(&DH_free)> dh {DH_new(), DH_free};
-+	if( !dh )
- 		return false;
- 
+-		return false;
+-
 -	dh->p = NULL;
 -	dh->g = NULL;
 -	dh->length = 0;
 -
  	//
- 	// set p ( prime ) value
+-	// set p ( prime ) value
++	// create p ( prime ) value
  	//
  
 -	unsigned char * p_data = NULL;
@@ -121,7 +120,8 @@ index 421e34f..9bac314 100644
  	}
  
  	//
- 	// set g ( generator ) value
+-	// set g ( generator ) value
++	// create g ( generator ) value
  	//
  
 -	dh->g = BN_new();
@@ -130,16 +130,11 @@ index 421e34f..9bac314 100644
 +	std::unique_ptr<BIGNUM, decltype(&BN_clear_free)> dh_g {BN_new(), BN_clear_free};
 +	if( !dh_g )
 +		return false;
-+
-+	if( !BN_set_word( dh_g.get(), 2 ) )
-+		return false;
  
 -	if( !BN_set_word( dh->g, 2 ) )
 -		goto dh_failed;
-+	if( DH_set0_pqg (dh.get(), dh_p.get(), dh_g.get(), nullptr) ) {
-+		dh_p.release();
-+		dh_g.release();
-+	}
++	if( !BN_set_word( dh_g.get(), 2 ) )
++		return false;
  
  	//
  	// generate private and public DH values
@@ -150,22 +145,33 @@ index 421e34f..9bac314 100644
 -
 -	*dh_data = dh;
 -	*dh_size = BN_num_bytes( dh->p );
++	std::unique_ptr<DH, decltype(&DH_free)> dh {DH_new(), DH_free};
++	if( !dh )
++		return false;
+ 
+-	return true;
+ 
+-	dh_failed:
++	if( DH_set0_pqg (dh.get(), dh_p.get(), nullptr, dh_g.get()) ) {
++		dh_p.release();
++		dh_g.release();
++	}
+ 
+-	DH_free( dh );
 +	if( !DH_generate_key( dh.get() ) )
 +		return false;
  
+-	return false;
 +	{
++		// We set set dh_size to the length of p, but client code uses
++		// it to size a buffer into which the public key is written
++		// to...  is that right?
 +		const BIGNUM * p;
 +		DH_get0_pqg ( dh.get(), &p, nullptr, nullptr );
 +		*dh_size = BN_num_bytes( p );
 +	}
 +	*dh_data = dh.release();
- 	return true;
--
--	dh_failed:
--
--	DH_free( dh );
--
--	return false;
++	return true;
  }
 diff --git a/source/iked/ike.cpp b/source/iked/ike.cpp
 index 1ad6a44..ca3acc4 100644
