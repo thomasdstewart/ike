@@ -1,0 +1,22 @@
+From: Sam Morris <sam@robots.org.uk>
+Date: Mon, 23 Jul 2018 17:59:33 +0100
+Subject: Exit if daemonization fails
+
+---
+ source/iked/main.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/source/iked/main.cpp b/source/iked/main.cpp
+index c822fca..689de8a 100644
+--- a/source/iked/main.cpp
++++ b/source/iked/main.cpp
+@@ -538,7 +538,8 @@ int main( int argc, char * argv[], char * envp[] )
+ 	//
+ 
+ 	if( service )
+-		daemon( 0, 0 );
++		if (0 != daemon( 0, 0 ))
++			return -1;
+ 
+ 	//
+ 	// create our pid file

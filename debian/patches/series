@@ -5,3 +5,4 @@ fix-readdir.patch
 spelling.patch
 paths.patch
 logfile-append.patch
+observe-daemon-result.patch
