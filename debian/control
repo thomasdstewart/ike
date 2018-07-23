@@ -16,6 +16,17 @@ Rules-Requires-Root: no
 Package: ike
 Architecture: any
 Depends:
- ${shlibs:Depends}
- ${misc:Depends}
-Description: Shrew Soft Inc VPN Client
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Shrew Soft VPN client - Daemon and libraries
+ The Shrew Soft VPN client is a free IPsec VPN Client for FreeBSD, NetBSD,
+ Linux and Windows operating systems. This product can be used to communicate
+ with Open Source VPN servers (e.g. ipsec-tools) as well as some commercial
+ VPN servers.
+ .
+ This package provides a IKEv1 (ipsec key exchange) daemon and libraries used
+ to maintain a IPSec VPN connection. It provides similar functionality as
+ racoon, OpenSwan, FreeSwan, StrongSwan, IsaKmpD but is more user-interactive.
+ .
+ Note: the GUI connetion manager is not packaged at this time due to it
+ depending on the deprecated QT4 libraries.
