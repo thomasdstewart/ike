@@ -1,0 +1,21 @@
+From: Sam Morris <sam@robots.org.uk>
+Date: Mon, 23 Jul 2018 17:30:28 +0100
+Subject: Don't truncate log file when iked starts
+
+---
+ source/liblog/liblog.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source/liblog/liblog.cpp b/source/liblog/liblog.cpp
+index 513fe70..7339082 100644
+--- a/source/liblog/liblog.cpp
++++ b/source/liblog/liblog.cpp
+@@ -198,7 +198,7 @@ bool _LOG::open( char * path, long level, long flags )
+ 			openlog( path, LOG_NDELAY, LOG_DAEMON );
+ 		else
+ 		{
+-			fp = fopen( path, "w" );
++			fp = fopen( path, "a" );
+ 
+ 			if( fp == NULL )
+ 				return false;
