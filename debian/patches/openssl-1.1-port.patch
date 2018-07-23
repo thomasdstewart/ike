@@ -3,7 +3,7 @@ Date: Fri, 20 Jul 2018 12:04:16 +0100
 Subject: openssl-1.1-port
 
 ---
- source/iked/crypto.cpp          |  95 +++++++++---------
+ source/iked/crypto.cpp          |  92 +++++++++--------
  source/iked/ike.cpp             |  30 +++---
  source/iked/ike.exch.config.cpp |  32 +++---
  source/iked/ike.exch.inform.cpp |  31 +++---
@@ -14,10 +14,10 @@ Subject: openssl-1.1-port
  source/iked/ike.idb.phase2.cpp  |   4 +-
  source/iked/ike.keyfile.cpp     |  32 +++---
  source/libike/manager.file.cpp  |  12 ++-
- 11 files changed, 292 insertions(+), 268 deletions(-)
+ 11 files changed, 289 insertions(+), 268 deletions(-)
 
 diff --git a/source/iked/crypto.cpp b/source/iked/crypto.cpp
-index 421e34f..9d9ea2f 100644
+index 421e34f..115c1f8 100644
 --- a/source/iked/crypto.cpp
 +++ b/source/iked/crypto.cpp
 @@ -39,6 +39,8 @@
@@ -29,7 +29,7 @@ index 421e34f..9d9ea2f 100644
  #include "crypto.h"
  
  void crypto_init()
-@@ -372,97 +374,96 @@ static unsigned char group18[] =
+@@ -372,97 +374,93 @@ static unsigned char group18[] =
  
  bool dh_init( long group, DH ** dh_data, long * dh_size )
  {
@@ -163,12 +163,9 @@ index 421e34f..9d9ea2f 100644
  
 -	return false;
 +	{
-+		// We set set dh_size to the length of p, but client code uses
-+		// it to size a buffer into which the public key is written
-+		// to...  is that right?
-+		const BIGNUM * p;
-+		DH_get0_pqg ( dh.get(), &p, nullptr, nullptr );
-+		*dh_size = BN_num_bytes( p );
++		const BIGNUM * pub_key;
++		DH_get0_key ( dh.get(), &pub_key, nullptr );
++		*dh_size = BN_num_bytes( pub_key );
 +	}
 +	*dh_data = dh.release();
 +	return true;
