@@ -14,6 +14,7 @@ override_dh_auto_configure:
 	    -DCMAKE_INSTALL_RPATH='$$'ORIGIN/../$(libsubdir) \
 	    -DMANDIR=/usr/share/man \
 	    -DNATT=YES \
+	    -DSYSTEMD=YES \
 	    -DLIBDIR=/usr/$(libsubdir)
 
 override_dh_auto_install:

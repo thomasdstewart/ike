@@ -5,6 +5,3 @@ Documentation=man:iked(8)
 [Service]
 Type=simple
 ExecStart=/usr/sbin/iked -F -l /var/log/iked.log
-
-[Install]
-WantedBy=multi-user.target

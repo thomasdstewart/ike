@@ -6,3 +6,4 @@ spelling.patch
 paths.patch
 logfile-append.patch
 observe-daemon-result.patch
+socket-activation.patch

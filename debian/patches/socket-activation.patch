@@ -1,0 +1,157 @@
+From: Sam Morris <sam@robots.org.uk>
+Date: Wed, 25 Jul 2018 14:19:19 +0100
+Subject: Use socket activation for iked IPC socket
+
+---
+ CMakeLists.txt               | 17 +++++++++++++
+ source/libith/CMakeLists.txt |  7 ++++++
+ source/libith/libith.cpp     | 57 +++++++++++++++++++++++++++++++-------------
+ 3 files changed, 64 insertions(+), 17 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8170453..8cf9c2f 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -400,6 +400,22 @@ if( NOT PATH_INC_PFKEYV2 )
+ 
+ endif( NOT PATH_INC_PFKEYV2 )
+ 
++if( SYSTEMD )
++
++	find_package( PkgConfig REQUIRED )
++
++	if( PkgConfig_FOUND )
++		pkg_check_modules( systemd REQUIRED libsystemd )
++	endif( PkgConfig_FOUND )
++
++	message(
++		STATUS
++		"Enabled systemd socket activation support ..." )
++
++	add_definitions( -DOPT_SYSTEMD )
++
++endif( SYSTEMD )
++
+ #
+ # Build Option Checks
+ #
+@@ -407,6 +423,7 @@ endif( NOT PATH_INC_PFKEYV2 )
+ OPTION( DEBUG   "include Debug Symbol support" )
+ OPTION( NATT    "include NAT Traversal support" )
+ OPTION( LDAP    "include LDAP Authentication support" )
++OPTION( SYSTEMD "include socket activation support" )
+ OPTION( QTGUI   "include Client QT GUI support" )
+ OPTION( TESTS   "include library test programs" )
+ OPTION( ETCDIR  "custom etc install path" )
+diff --git a/source/libith/CMakeLists.txt b/source/libith/CMakeLists.txt
+index 1f4f6f1..0933182 100644
+--- a/source/libith/CMakeLists.txt
++++ b/source/libith/CMakeLists.txt
+@@ -20,6 +20,7 @@ if( PATH_LIB_RT )
+ 
+ 	target_link_libraries(
+ 		ss_ith
++		INTERFACE
+ 		rt )
+ 
+ endif( PATH_LIB_RT )
+@@ -45,6 +46,12 @@ if( APPLE )
+ 
+ endif( APPLE )
+ 
++if( SYSTEMD )
++	target_include_directories(ss_ith PRIVATE ${systemd_INCLUDE_DIRS})
++	target_compile_options(ss_ith PRIVATE ${systemd_CFLAGS_OTHER})
++	target_link_libraries(ss_ith INTERFACE ${systemd_LIBRARIES})
++endif( SYSTEMD )
++
+ install(
+ 	TARGETS ss_ith
+ 	LIBRARY DESTINATION ${PATH_LIB}
+diff --git a/source/libith/libith.cpp b/source/libith/libith.cpp
+index 1500553..082a10d 100644
+--- a/source/libith/libith.cpp
++++ b/source/libith/libith.cpp
+@@ -40,6 +40,11 @@
+ 
+ #include "libith.h"
+ 
++#ifdef OPT_SYSTEMD
++# include <systemd/sd-journal.h>
++# include <systemd/sd-daemon.h>
++#endif
++
+ //==============================================================================
+ // mutex lock class
+ //==============================================================================
+@@ -1466,35 +1471,53 @@ _ITH_IPCS::~_ITH_IPCS()
+ 
+ long _ITH_IPCS::init( const char * path, bool admin )
+ {
+-	unlink( path );
+-
+-	conn = socket( AF_UNIX, SOCK_STREAM, 0 );
+-	if( conn == -1 )
++#ifdef OPT_SYSTEMD
++	int r = sd_listen_fds( 1 );
++	if (r < 0) {
++		sd_journal_print( LOG_CRIT, "sd_listen_fds returned %d", r );
+ 		return IPCERR_FAILED;
++	} else if (r == 0) {
++#endif
++		// socket activation not used - create the socket ourselves
+ 
+-	struct sockaddr_un saddr;
+-	saddr.sun_family = AF_UNIX;
++		unlink( path );
+ 
+-	long sun_len =  strlen( path ) + sizeof( saddr.sun_family );
++		conn = socket( AF_UNIX, SOCK_STREAM, 0 );
++		if( conn == -1 )
++			return IPCERR_FAILED;
++
++		struct sockaddr_un saddr;
++		saddr.sun_family = AF_UNIX;
++
++		long sun_len =  strlen( path ) + sizeof( saddr.sun_family );
+ 
+ #ifndef __linux__
+-        sun_len += sizeof( saddr.sun_len );
+-        saddr.sun_len = sun_len;
++		sun_len += sizeof( saddr.sun_len );
++		saddr.sun_len = sun_len;
+ #endif
+ 
+-	strcpy( saddr.sun_path, path );
++		strcpy( saddr.sun_path, path );
+ 
+-	if( bind( conn, ( struct sockaddr * ) &saddr, sun_len ) < 0 )
+-		return IPCERR_FAILED;
++		if( bind( conn, ( struct sockaddr * ) &saddr, sun_len ) < 0 )
++			return IPCERR_FAILED;
+ 
+-	if( !admin )
+-		if( chmod( path, S_IRWXU | S_IRWXG | S_IRWXO ) < 0 )
++		if( !admin )
++			if( chmod( path, S_IRWXU | S_IRWXG | S_IRWXO ) < 0 )
++				return IPCERR_FAILED;
++
++		if( listen( conn, 5 ) < 0 )
+ 			return IPCERR_FAILED;
+ 
+-	if( listen( conn, 5 ) < 0 )
++		return IPCERR_OK;
++#ifdef OPT_SYSTEMD
++	} else if (r == 1) {
++		conn = SD_LISTEN_FDS_START + 0;
++	} else {
++		// socket activation passed >1 fd
++		sd_journal_print( LOG_CRIT, "sd_listen_fds passed too many fds (%d)", r );
+ 		return IPCERR_FAILED;
+-
+-	return IPCERR_OK;
++	}
++#endif
+ }
+ 
+ void _ITH_IPCS::done()

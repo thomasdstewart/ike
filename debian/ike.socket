@@ -1,0 +1,9 @@
+[Unit]
+Description=iked control socket
+Documentation=man:ikec(1) man:iked(8)
+
+[Socket]
+ListenStream=/var/run/ikedi
+
+[Install]
+WantedBy=sockets.target
