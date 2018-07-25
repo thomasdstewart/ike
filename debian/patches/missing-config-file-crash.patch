@@ -1,0 +1,32 @@
+From: Sam Morris <sam@robots.org.uk>
+Date: Wed, 25 Jul 2018 17:55:43 +0100
+Subject: ikec: don't crash when the config file cannot be found
+
+After failing to load a config file from sites_user, ikec attempts to
+load it from sites_all, which is only initialized on Windows.
+---
+ source/libike/manager.file.cpp | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/source/libike/manager.file.cpp b/source/libike/manager.file.cpp
+index 29382c4..4456ef5 100644
+--- a/source/libike/manager.file.cpp
++++ b/source/libike/manager.file.cpp
+@@ -178,10 +178,15 @@ bool _CONFIG_MANAGER::file_enumerate_public( CONFIG & config, int & index )
+ bool _CONFIG_MANAGER::file_vpn_load( CONFIG & config )
+ {
+ 	BDATA path;
+-	if( config.get_ispublic() )
++	if( config.get_ispublic() ) {
++		if ( !sites_all.buff() )
++			return false;
+ 		path.add( sites_all );
+-	else
++	} else {
++		if ( !sites_user.buff() )
++			return false;
+ 		path.add( sites_user );
++	}
+ 
+ 	path.ins( PATH_DELIM, 1, path.size() - 1 );
+ 	path.ins( config.get_id(), strlen( config.get_id() ), path.size() - 1 );

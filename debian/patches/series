@@ -7,3 +7,4 @@ paths.patch
 logfile-append.patch
 observe-daemon-result.patch
 socket-activation.patch
+missing-config-file-crash.patch
