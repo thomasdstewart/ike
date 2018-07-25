@@ -7,7 +7,7 @@ Subject: Exit if daemonization fails
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/source/iked/main.cpp b/source/iked/main.cpp
-index c822fca..689de8a 100644
+index 2cf61c4..550c0b9 100644
 --- a/source/iked/main.cpp
 +++ b/source/iked/main.cpp
 @@ -538,7 +538,8 @@ int main( int argc, char * argv[], char * envp[] )
