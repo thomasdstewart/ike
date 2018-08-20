@@ -3,10 +3,16 @@ Date: Wed, 25 Jul 2018 14:19:19 +0100
 Subject: Use socket activation for iked IPC socket
 
 ---
- CMakeLists.txt               | 17 +++++++++++++
- source/libith/CMakeLists.txt |  7 ++++++
- source/libith/libith.cpp     | 57 +++++++++++++++++++++++++++++++-------------
- 3 files changed, 64 insertions(+), 17 deletions(-)
+ CMakeLists.txt               | 17 ++++++++++++
+ source/iked/iked.cpp         |  4 +--
+ source/iked/iked.h           |  2 +-
+ source/iked/main.cpp         |  9 ++++++-
+ source/libike/libike.cpp     |  4 +--
+ source/libike/libike.h       |  2 +-
+ source/libith/CMakeLists.txt |  7 +++++
+ source/libith/libith.cpp     | 61 +++++++++++++++++++++++++++++---------------
+ source/libith/libith.h       |  2 +-
+ 9 files changed, 80 insertions(+), 28 deletions(-)
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 index 8170453..8cf9c2f 100644
@@ -43,6 +49,102 @@ index 8170453..8cf9c2f 100644
  OPTION( QTGUI   "include Client QT GUI support" )
  OPTION( TESTS   "include library test programs" )
  OPTION( ETCDIR  "custom etc install path" )
+diff --git a/source/iked/iked.cpp b/source/iked/iked.cpp
+index 6a0842c..e368fff 100644
+--- a/source/iked/iked.cpp
++++ b/source/iked/iked.cpp
+@@ -182,13 +182,13 @@ _IKED::~_IKED()
+ 	idb_list_netgrp.clean();
+ }
+ 
+-long _IKED::init( long setlevel )
++long _IKED::init( long setlevel, bool socket_activation )
+ {
+ 	//
+ 	// initialize ike service interface
+ 	//
+ 
+-	if( ikes.init() != IPCERR_OK )
++	if( ikes.init( socket_activation ) != IPCERR_OK )
+ 	{
+ 		printf( "Another instance of iked was detected\n" );
+ 		return LIBIKE_FAILED;
+diff --git a/source/iked/iked.h b/source/iked/iked.h
+index 444a2bd..03d5c7d 100644
+--- a/source/iked/iked.h
++++ b/source/iked/iked.h
+@@ -791,7 +791,7 @@ typedef class _IKED
+ 
+ 	void	set_files( char * set_path_conf, const char * set_path_log );
+ 
+-	long	init( long setlevel );
++	long	init( long setlevel, bool socket_activation );
+ 	long	halt( bool terminate );
+ 	void	loop();
+ 
+diff --git a/source/iked/main.cpp b/source/iked/main.cpp
+index 550c0b9..b2c264d 100644
+--- a/source/iked/main.cpp
++++ b/source/iked/main.cpp
+@@ -442,6 +442,7 @@ int main( int argc, char * argv[], char * envp[] )
+ 	char path_pid[ MAX_PATH ] = { 0 };
+ 	bool service = true;
+ 	long debuglevel = 0;
++	bool socket_activation = false;
+ 
+ 	for( long argi = 1; argi < argc; argi++ )
+ 	{
+@@ -508,6 +509,12 @@ int main( int argc, char * argv[], char * envp[] )
+ 			continue;
+ 		}
+ 
++		if( !strcmp( argv[ argi ], "--socket-activation" ) )
++		{
++			socket_activation = true;
++			continue;
++		}
++
+ 		printf( "invalid option %s specified\n", argv[ argi ] );
+ 		return -1;
+ 	}
+@@ -530,7 +537,7 @@ int main( int argc, char * argv[], char * envp[] )
+ 	// initialize
+ 	//
+ 
+-	if( iked.init( debuglevel ) != LIBIKE_OK )
++	if( iked.init( debuglevel, socket_activation ) != LIBIKE_OK )
+ 		return -1;
+ 
+ 	//
+diff --git a/source/libike/libike.cpp b/source/libike/libike.cpp
+index 7a6a2d5..7e4ee13 100644
+--- a/source/libike/libike.cpp
++++ b/source/libike/libike.cpp
+@@ -309,9 +309,9 @@ long _IKEI::send_message( IKEI_MSG & msg, long * rslt )
+ 	return msg_rslt.get_result( rslt );
+ }
+ 
+-long _IKES::init()
++long _IKES::init( bool socket_activation )
+ {
+-	return ITH_IPCS::init( IKEI_PIPE_NAME, false );
++	return ITH_IPCS::init( IKEI_PIPE_NAME, false, socket_activation );
+ }
+ 
+ void _IKES::done()
+diff --git a/source/libike/libike.h b/source/libike/libike.h
+index 8327813..660e070 100644
+--- a/source/libike/libike.h
++++ b/source/libike/libike.h
+@@ -207,7 +207,7 @@ typedef class DLX _IKES : private _ITH_IPCS
+ {
+ 	public:
+ 
+-	long	init();
++	long	init( bool socket_activation );
+ 	void	done();
+ 
+ 	long	inbound( IKEI ** ikei );
 diff --git a/source/libith/CMakeLists.txt b/source/libith/CMakeLists.txt
 index 1f4f6f1..0933182 100644
 --- a/source/libith/CMakeLists.txt
@@ -69,7 +171,7 @@ index 1f4f6f1..0933182 100644
  	TARGETS ss_ith
  	LIBRARY DESTINATION ${PATH_LIB}
 diff --git a/source/libith/libith.cpp b/source/libith/libith.cpp
-index 1500553..082a10d 100644
+index 1500553..51d756c 100644
 --- a/source/libith/libith.cpp
 +++ b/source/libith/libith.cpp
 @@ -40,6 +40,11 @@
@@ -84,32 +186,50 @@ index 1500553..082a10d 100644
  //==============================================================================
  // mutex lock class
  //==============================================================================
-@@ -1466,35 +1471,53 @@ _ITH_IPCS::~_ITH_IPCS()
+@@ -1068,7 +1073,7 @@ _ITH_IPCS::~_ITH_IPCS()
+ 	}
+ }
  
- long _ITH_IPCS::init( const char * path, bool admin )
+-long _ITH_IPCS::init( const char * path, bool admin )
++long _ITH_IPCS::init( const char * path, bool admin, bool )
+ {
+ 	// when creating a named pipe with explicit access,
+ 	// you must specify FILE_CREATE_PIPE_INSTANCE for
+@@ -1464,37 +1469,53 @@ _ITH_IPCS::~_ITH_IPCS()
+ 	}
+ }
+ 
+-long _ITH_IPCS::init( const char * path, bool admin )
++long _ITH_IPCS::init( const char * path, bool admin, bool socket_activation )
  {
 -	unlink( path );
 -
 -	conn = socket( AF_UNIX, SOCK_STREAM, 0 );
 -	if( conn == -1 )
++	if (socket_activation) {
 +#ifdef OPT_SYSTEMD
-+	int r = sd_listen_fds( 1 );
-+	if (r < 0) {
-+		sd_journal_print( LOG_CRIT, "sd_listen_fds returned %d", r );
++		int r = sd_listen_fds( 1 );
++		if (r == 1) {
++			conn = SD_LISTEN_FDS_START + 0;
++			return IPCERR_OK;
++		} else {
++			printf( "XX : socket activation failed, sd_listen_fds returned %d (expected: 1)\n", r );
++			return IPCERR_FAILED;
++		}
++#else
++		printf( "XX : socket activation failed, systemd socket activation support not enabled at compile time\n" );
  		return IPCERR_FAILED;
-+	} else if (r == 0) {
 +#endif
-+		// socket activation not used - create the socket ourselves
++	} else {
++		unlink( path );
  
 -	struct sockaddr_un saddr;
 -	saddr.sun_family = AF_UNIX;
-+		unlink( path );
- 
--	long sun_len =  strlen( path ) + sizeof( saddr.sun_family );
 +		conn = socket( AF_UNIX, SOCK_STREAM, 0 );
 +		if( conn == -1 )
 +			return IPCERR_FAILED;
-+
+ 
+-	long sun_len =  strlen( path ) + sizeof( saddr.sun_family );
 +		struct sockaddr_un saddr;
 +		saddr.sun_family = AF_UNIX;
 +
@@ -123,35 +243,41 @@ index 1500553..082a10d 100644
  #endif
  
 -	strcpy( saddr.sun_path, path );
-+		strcpy( saddr.sun_path, path );
- 
+-
 -	if( bind( conn, ( struct sockaddr * ) &saddr, sun_len ) < 0 )
 -		return IPCERR_FAILED;
-+		if( bind( conn, ( struct sockaddr * ) &saddr, sun_len ) < 0 )
-+			return IPCERR_FAILED;
++		strcpy( saddr.sun_path, path );
  
 -	if( !admin )
 -		if( chmod( path, S_IRWXU | S_IRWXG | S_IRWXO ) < 0 )
-+		if( !admin )
-+			if( chmod( path, S_IRWXU | S_IRWXG | S_IRWXO ) < 0 )
-+				return IPCERR_FAILED;
-+
-+		if( listen( conn, 5 ) < 0 )
++		if( bind( conn, ( struct sockaddr * ) &saddr, sun_len ) < 0 )
  			return IPCERR_FAILED;
  
 -	if( listen( conn, 5 ) < 0 )
-+		return IPCERR_OK;
-+#ifdef OPT_SYSTEMD
-+	} else if (r == 1) {
-+		conn = SD_LISTEN_FDS_START + 0;
-+	} else {
-+		// socket activation passed >1 fd
-+		sd_journal_print( LOG_CRIT, "sd_listen_fds passed too many fds (%d)", r );
- 		return IPCERR_FAILED;
--
+-		return IPCERR_FAILED;
++		if( !admin )
++			if( chmod( path, S_IRWXU | S_IRWXG | S_IRWXO ) < 0 )
++				return IPCERR_FAILED;
+ 
 -	return IPCERR_OK;
++		if( listen( conn, 5 ) < 0 )
++			return IPCERR_FAILED;
++
++		return IPCERR_OK;
 +	}
-+#endif
  }
  
  void _ITH_IPCS::done()
+diff --git a/source/libith/libith.h b/source/libith/libith.h
+index 34ec6e8..260a39a 100644
+--- a/source/libith/libith.h
++++ b/source/libith/libith.h
+@@ -352,7 +352,7 @@ typedef class DLX _ITH_IPCS
+ 	_ITH_IPCS();
+ 	~_ITH_IPCS();
+ 
+-	long	init( const char * path, bool admin );
++	long	init( const char * path, bool admin, bool socket_activation );
+ 	void	done();
+ 
+ 	long	inbound( const char * path, IPCCONN & ipcconn );
