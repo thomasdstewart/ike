@@ -6,16 +6,23 @@ Subject: bison-3-port
  source/iked/conf.parse.yy | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/source/iked/conf.parse.yy b/source/iked/conf.parse.yy
-index 1bae542..5b1d3dd 100644
---- a/source/iked/conf.parse.yy
-+++ b/source/iked/conf.parse.yy
+--- ike.orig/source/iked/conf.parse.yy
++++ ike/source/iked/conf.parse.yy
 @@ -41,7 +41,7 @@
  
  %skeleton "lalr1.cc"
  %defines
 -%define "parser_class_name" "conf_parser"
-+%define "parser_class_name" {conf_parser}
++%define api.parser.class {conf_parser}
  
  %{
  
+@@ -56,7 +56,7 @@
+ %lex-param   { IKED & iked }
+ %locations
+ %debug
+-%error-verbose
++%define parse.error verbose
+ 
+ // Symbols.
+ %union
